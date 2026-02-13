@@ -12,6 +12,8 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 public class SummaryService {
+    private final AiOpinionService aiOpinionService;
+
     private static final Set<String> STOP_WORDS = Set.of(
             "the", "and", "for", "with", "from", "that", "this", "into", "about", "after", "before",
             "over", "under", "news", "israel", "israeli", "said", "says", "will", "have", "has", "had",
@@ -24,7 +26,11 @@ public class SummaryService {
             "была", "были", "быть", "этого", "этой", "этом"
     );
 
-    public String buildSummary(List<NewsArticle> articles) {
+    public SummaryService() {
+        this.aiOpinionService = new AiOpinionService(java.net.http.HttpClient.newHttpClient());
+    }
+
+    public String buildSummary(List<NewsArticle> articles, java.time.LocalDate date) {
         if (articles.isEmpty()) {
             return "За выбранный день новостей по Израилю не найдено.";
         }
@@ -48,7 +54,15 @@ public class SummaryService {
         lines.add("Краткий вывод:");
         lines.add(buildConclusion(articles, topics));
 
+        lines.add("");
+        lines.add("AI-мнение:");
+        lines.add(aiOpinionService.buildOpinion(date, articles));
+
         return String.join("\n", lines);
+    }
+
+    public String buildSummary(List<NewsArticle> articles) {
+        return buildSummary(articles, java.time.LocalDate.now());
     }
 
     private List<String> extractTopics(List<NewsArticle> articles) {

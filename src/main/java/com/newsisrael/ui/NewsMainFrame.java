@@ -207,7 +207,7 @@ public class NewsMainFrame extends JFrame {
                 refreshButton.setEnabled(true);
                 try {
                     List<NewsArticle> articles = get();
-                    String summary = summaryService.buildSummary(articles);
+                    String summary = summaryService.buildSummary(articles, date);
                     panel.setData(articles, summary);
                     statusLabel.setText("Обновлено: " + TAB_DATE_FORMAT.format(date) + " | новостей: " + articles.size());
                 } catch (Exception ex) {
