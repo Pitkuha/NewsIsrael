@@ -23,7 +23,6 @@ import javax.swing.WindowConstants;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
-import java.awt.ComponentOrientation;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
@@ -120,7 +119,7 @@ public class NewsMainFrame extends JFrame {
         languageLabel = new JLabel();
         languageComboBox = new JComboBox<>(AppLanguage.values());
         languageComboBox.setSelectedItem(currentLanguage);
-        languageComboBox.setPreferredSize(new Dimension(110, 30));
+        languageComboBox.setPreferredSize(new Dimension(140, 30));
         languageComboBox.addActionListener(e -> {
             AppLanguage selected = (AppLanguage) languageComboBox.getSelectedItem();
             if (selected != null && selected != currentLanguage) {
@@ -172,22 +171,6 @@ public class NewsMainFrame extends JFrame {
             panel.setLanguage(currentLanguage);
         }
         updateTabTitles();
-
-        ComponentOrientation orientation = currentLanguage.isRtl()
-                ? ComponentOrientation.RIGHT_TO_LEFT
-                : ComponentOrientation.LEFT_TO_RIGHT;
-        rootPanel.applyComponentOrientation(orientation);
-        applyComponentOrientationRecursively(rootPanel, orientation);
-        SwingUtilities.updateComponentTreeUI(this);
-    }
-
-    private void applyComponentOrientationRecursively(Component component, ComponentOrientation orientation) {
-        component.setComponentOrientation(orientation);
-        if (component instanceof java.awt.Container container) {
-            for (Component child : container.getComponents()) {
-                applyComponentOrientationRecursively(child, orientation);
-            }
-        }
     }
 
     private void initDefaultTab() {

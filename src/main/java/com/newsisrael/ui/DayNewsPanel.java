@@ -17,7 +17,6 @@ import javax.swing.ListSelectionModel;
 import javax.swing.event.HyperlinkEvent;
 import java.awt.BorderLayout;
 import java.awt.Color;
-import java.awt.ComponentOrientation;
 import java.awt.Desktop;
 import java.awt.Font;
 import java.io.IOException;
@@ -49,7 +48,7 @@ public class DayNewsPanel extends JPanel {
         titleLabel.setForeground(new Color(26, 39, 64));
 
         summaryPane = new JEditorPane();
-        summaryPane.setContentType("text/plain");
+        summaryPane.setContentType("text/html");
         summaryPane.setEditable(false);
         summaryPane.setFont(new Font("SansSerif", Font.PLAIN, 14));
         summaryPane.setBackground(Color.WHITE);
@@ -123,29 +122,39 @@ public class DayNewsPanel extends JPanel {
         listScroll.setBorder(BorderFactory.createTitledBorder(I18n.panelNewsSection(language)));
         detailScroll.setBorder(BorderFactory.createTitledBorder(I18n.panelDetailsSection(language)));
 
-        ComponentOrientation orientation = language.isRtl()
-                ? ComponentOrientation.RIGHT_TO_LEFT
-                : ComponentOrientation.LEFT_TO_RIGHT;
-        applyComponentOrientation(orientation);
+        // Keep overall layout stable; apply direction only to text-heavy components.
+        if (language.isRtl()) {
+            summaryPane.setComponentOrientation(java.awt.ComponentOrientation.RIGHT_TO_LEFT);
+            newsList.setComponentOrientation(java.awt.ComponentOrientation.RIGHT_TO_LEFT);
+        } else {
+            summaryPane.setComponentOrientation(java.awt.ComponentOrientation.LEFT_TO_RIGHT);
+            newsList.setComponentOrientation(java.awt.ComponentOrientation.LEFT_TO_RIGHT);
+        }
+        detailsPane.setComponentOrientation(java.awt.ComponentOrientation.LEFT_TO_RIGHT);
     }
 
     public void setLoadingState(String text) {
         titleLabel.setText(text);
-        summaryPane.setText(I18n.panelLoadingText(language));
+        setSummaryText(I18n.panelLoadingText(language));
+        summaryPane.setCaretPosition(0);
         listModel.clear();
         detailsPane.setText("");
+        detailsPane.setCaretPosition(0);
     }
 
     public void setErrorState(String message) {
         titleLabel.setText(I18n.panelErrorTitle(language));
-        summaryPane.setText(message);
+        setSummaryText(message);
+        summaryPane.setCaretPosition(0);
         listModel.clear();
-        detailsPane.setText("<html><body><p>" + escape(I18n.panelLoadFailed(language)) + "</p></body></html>");
+        detailsPane.setText(renderSimpleMessage(I18n.panelLoadFailed(language)));
+        detailsPane.setCaretPosition(0);
     }
 
     public void setData(List<NewsArticle> articles, String summary) {
         titleLabel.setText(I18n.panelNewsAndSummaryTitle(language));
-        summaryPane.setText(summary);
+        setSummaryText(summary);
+        summaryPane.setCaretPosition(0);
         listModel.clear();
         for (NewsArticle article : articles) {
             listModel.addElement(article);
@@ -153,7 +162,8 @@ public class DayNewsPanel extends JPanel {
         if (!listModel.isEmpty()) {
             newsList.setSelectedIndex(0);
         } else {
-            detailsPane.setText("<html><body><p>" + escape(I18n.panelNoPublications(language)) + "</p></body></html>");
+            detailsPane.setText(renderSimpleMessage(I18n.panelNoPublications(language)));
+            detailsPane.setCaretPosition(0);
         }
     }
 
@@ -167,8 +177,14 @@ public class DayNewsPanel extends JPanel {
         String description = article.description().isBlank() ? I18n.descriptionMissing(language) : article.description();
         String url = article.url().isBlank() ? "" : article.url();
 
+        String dir = language.isRtl() ? "rtl" : "ltr";
+        String align = language.isRtl() ? "right" : "left";
+
         StringBuilder html = new StringBuilder();
-        html.append("<html><body style='font-family:SansSerif; color:#1f2a44;'>");
+        html.append("<html><body dir='").append(dir)
+                .append("' style='font-family:SansSerif; color:#1f2a44; text-align:")
+                .append(align)
+                .append("; margin:0;'>");
         html.append("<h2 style='margin-top:0;'>").append(escape(article.title())).append("</h2>");
         html.append("<p><b>").append(escape(I18n.sourceLabel(language))).append("</b> ").append(escape(article.source())).append("</p>");
         html.append("<p><b>").append(escape(I18n.timeLabel(language))).append("</b> ").append(escape(published)).append("</p>");
@@ -180,6 +196,7 @@ public class DayNewsPanel extends JPanel {
         }
         html.append("</body></html>");
         detailsPane.setText(html.toString());
+        detailsPane.setCaretPosition(0);
     }
 
     private void openUrl(String url) {
@@ -196,5 +213,20 @@ public class DayNewsPanel extends JPanel {
                 .replace("<", "&lt;")
                 .replace(">", "&gt;")
                 .replace("\"", "&quot;");
+    }
+
+    private String renderSimpleMessage(String message) {
+        String dir = language.isRtl() ? "rtl" : "ltr";
+        String align = language.isRtl() ? "right" : "left";
+        return "<html><body dir='" + dir + "' style='font-family:SansSerif; text-align:" + align + ";'>"
+                + "<p>" + escape(message) + "</p></body></html>";
+    }
+
+    private void setSummaryText(String text) {
+        String dir = language.isRtl() ? "rtl" : "ltr";
+        String align = language.isRtl() ? "right" : "left";
+        String safe = escape(text == null ? "" : text).replace("\n", "<br/>");
+        summaryPane.setText("<html><body dir='" + dir + "' style='font-family:SansSerif; text-align:" + align
+                + "; margin:0;'>" + safe + "</body></html>");
     }
 }
