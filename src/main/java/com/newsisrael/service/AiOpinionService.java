@@ -1,5 +1,7 @@
 package com.newsisrael.service;
 
+import com.newsisrael.i18n.AppLanguage;
+import com.newsisrael.i18n.I18n;
 import com.newsisrael.model.NewsArticle;
 
 import java.io.IOException;
@@ -25,12 +27,12 @@ public class AiOpinionService {
         this.httpClient = httpClient;
     }
 
-    public String buildOpinion(LocalDate date, List<NewsArticle> articles) {
+    public String buildOpinion(LocalDate date, List<NewsArticle> articles, AppLanguage language) {
         if (articles == null || articles.isEmpty()) {
-            return "AI-мнение недоступно: нет новостей для анализа.";
+            return I18n.aiUnavailable(language);
         }
 
-        String prompt = buildPrompt(date, articles);
+        String prompt = buildPrompt(date, articles, language);
 
         String fromOpenAi = requestOpenAi(prompt);
         if (!fromOpenAi.isBlank()) {
@@ -42,27 +44,58 @@ public class AiOpinionService {
             return fromOllama;
         }
 
-        return fallbackOpinion(date, articles);
+        return fallbackOpinion(date, articles, language);
     }
 
-    private String buildPrompt(LocalDate date, List<NewsArticle> articles) {
+    public String buildOpinion(LocalDate date, List<NewsArticle> articles) {
+        return buildOpinion(date, articles, AppLanguage.defaultLanguage());
+    }
+
+    private String buildPrompt(LocalDate date, List<NewsArticle> articles, AppLanguage language) {
         StringBuilder sb = new StringBuilder();
-        sb.append("Дата: ").append(DATE_FORMAT.format(date)).append(".\\n");
-        sb.append("Ниже заголовки и краткие описания новостей про Израиль за день. ");
-        sb.append("Проанализируй и дай свое мнение об обстановке в Израиле на сегодня. ");
-        sb.append("Ответ только на русском, 3-5 предложений, без списков и без дисклеймеров.\\n\\n");
+        sb.append(promptHeader(language, date)).append("\n\n");
 
         int max = Math.min(articles.size(), 25);
         for (int i = 0; i < max; i++) {
             NewsArticle article = articles.get(i);
             sb.append(i + 1)
-                    .append(") Заголовок: ")
+                    .append(") ")
+                    .append(promptTitleLabel(language))
                     .append(trim(article.title(), 220))
-                    .append("; Описание: ")
+                    .append("; ")
+                    .append(promptDescriptionLabel(language))
                     .append(trim(article.description(), 260))
-                    .append("\\n");
+                    .append("\n");
         }
         return sb.toString();
+    }
+
+    private String promptHeader(AppLanguage language, LocalDate date) {
+        String dateText = DATE_FORMAT.format(date);
+        return switch (language) {
+            case RUSSIAN -> "Дата: " + dateText + ". Ниже новости про Израиль за день. Проанализируй их и дай свое мнение об обстановке в Израиле на сегодня. Ответ только на русском, 3-5 предложений, без списков и без дисклеймеров.";
+            case ENGLISH -> "Date: " + dateText + ". Below are Israel-related articles for the day. Analyze them and provide your view of the current situation in Israel today. Answer in English, 3-5 sentences, no lists, no disclaimers.";
+            case HEBREW -> "תאריך: " + dateText + ". להלן חדשות על ישראל לאותו יום. נתח אותן וכתוב הערכה על המצב בישראל היום. תשובה בעברית בלבד, 3-5 משפטים, ללא רשימות וללא הסתייגויות.";
+            case ARABIC -> "التاريخ: " + dateText + ". فيما يلي أخبار متعلقة بإسرائيل خلال اليوم. حلّلها وقدّم رأيك حول الوضع الحالي في إسرائيل. الإجابة بالعربية فقط، 3-5 جمل، بدون قوائم وبدون تنبيهات.";
+        };
+    }
+
+    private String promptTitleLabel(AppLanguage language) {
+        return switch (language) {
+            case RUSSIAN -> "Заголовок: ";
+            case ENGLISH -> "Title: ";
+            case HEBREW -> "כותרת: ";
+            case ARABIC -> "العنوان: ";
+        };
+    }
+
+    private String promptDescriptionLabel(AppLanguage language) {
+        return switch (language) {
+            case RUSSIAN -> "Описание: ";
+            case ENGLISH -> "Description: ";
+            case HEBREW -> "תיאור: ";
+            case ARABIC -> "الوصف: ";
+        };
     }
 
     private String requestOpenAi(String prompt) {
@@ -137,17 +170,30 @@ public class AiOpinionService {
         return unescapeJson(matcher.group(1)).trim();
     }
 
-    private String fallbackOpinion(LocalDate date, List<NewsArticle> articles) {
+    private String fallbackOpinion(LocalDate date, List<NewsArticle> articles, AppLanguage language) {
         int total = articles.size();
         long escalationSignals = articles.stream()
                 .map(a -> (a.title() + " " + a.description()).toLowerCase(Locale.ROOT))
-                .filter(text -> text.contains("удар")
-                        || text.contains("атака")
-                        || text.contains("обстрел")
-                        || text.contains("конфликт")
-                        || text.contains("эвакуац"))
+                .filter(this::containsEscalationKeyword)
                 .count();
 
+        return switch (language) {
+            case RUSSIAN -> fallbackRu(date, total, escalationSignals);
+            case ENGLISH -> fallbackEn(date, total, escalationSignals);
+            case HEBREW -> fallbackHe(date, total, escalationSignals);
+            case ARABIC -> fallbackAr(date, total, escalationSignals);
+        };
+    }
+
+    private boolean containsEscalationKeyword(String text) {
+        return text.contains("удар") || text.contains("атака") || text.contains("обстрел") || text.contains("конфликт")
+                || text.contains("эвакуац") || text.contains("attack") || text.contains("strike") || text.contains("clash")
+                || text.contains("conflict") || text.contains("evac") || text.contains("هجوم") || text.contains("قصف")
+                || text.contains("تصعيد") || text.contains("صراع") || text.contains("התקפה") || text.contains("הסלמה")
+                || text.contains("עימות");
+    }
+
+    private String fallbackRu(LocalDate date, int total, long escalationSignals) {
         if (escalationSignals > 0) {
             return "На " + DATE_FORMAT.format(date)
                     + " информационная повестка по Израилю выглядит напряженной: значимая часть сообщений касается вопросов безопасности и эскалационных рисков. "
@@ -159,6 +205,48 @@ public class AiOpinionService {
                 + " новостной фон по Израилю выглядит смешанным и многослойным: в центре внимания сразу несколько тем без полной доминации одной повестки. "
                 + "По " + total + " публикациям заметно, что ситуация развивается поступательно, с регулярными обновлениями по политике, безопасности и международной реакции. "
                 + "Общий вывод: обстановка остается динамичной и требует постоянного мониторинга новых сообщений.";
+    }
+
+    private String fallbackEn(LocalDate date, int total, long escalationSignals) {
+        if (escalationSignals > 0) {
+            return "On " + DATE_FORMAT.format(date)
+                    + ", the information picture around Israel appears tense, with a meaningful share of reports focused on security and escalation risks. "
+                    + "At the same time, the coverage is diverse and reflects several parallel political and regional tracks. "
+                    + "Overall, uncertainty remains high and developments should be monitored continuously.";
+        }
+
+        return "On " + DATE_FORMAT.format(date)
+                + ", the Israel-related news flow appears mixed and multi-layered, with no single narrative fully dominating the agenda. "
+                + "Across " + total + " articles, updates continue to evolve across security, politics, and international responses. "
+                + "Overall, the situation remains dynamic and requires ongoing monitoring.";
+    }
+
+    private String fallbackHe(LocalDate date, int total, long escalationSignals) {
+        if (escalationSignals > 0) {
+            return "נכון ל-" + DATE_FORMAT.format(date)
+                    + ", תמונת החדשות סביב ישראל נראית מתוחה, וחלק משמעותי מהדיווחים עוסק בסוגיות ביטחוניות ובסיכוני הסלמה. "
+                    + "במקביל, הסיקור מגוון ומשקף כמה צירים פוליטיים ואזוריים במקביל. "
+                    + "בסך הכול רמת אי-הוודאות גבוהה, ולכן חשוב לעקוב אחר ההתפתחויות באופן רציף.";
+        }
+
+        return "נכון ל-" + DATE_FORMAT.format(date)
+                + ", הזרם החדשותי על ישראל נראה מעורב ורב-שכבתי, ללא נרטיב אחד דומיננטי באופן מלא. "
+                + "לאורך " + total + " כתבות ניכרת התפתחות מתמשכת בנושאי ביטחון, פוליטיקה ותגובות בינלאומיות. "
+                + "המסקנה הכללית: המצב דינמי ודורש מעקב שוטף.";
+    }
+
+    private String fallbackAr(LocalDate date, int total, long escalationSignals) {
+        if (escalationSignals > 0) {
+            return "في " + DATE_FORMAT.format(date)
+                    + " تبدو الصورة الإخبارية حول إسرائيل متوترة، إذ يركّز جزء مهم من التغطية على قضايا الأمن ومخاطر التصعيد. "
+                    + "وفي الوقت نفسه، يبقى التدفق الإعلامي متنوعًا ويعكس عدة مسارات سياسية وإقليمية متزامنة. "
+                    + "الخلاصة العامة: مستوى عدم اليقين مرتفع، ومن الضروري متابعة التطورات بشكل مستمر.";
+        }
+
+        return "في " + DATE_FORMAT.format(date)
+                + " يظهر المشهد الإخباري المرتبط بإسرائيل بصورة مركبة ومتعددة المستويات، دون هيمنة كاملة لسردية واحدة. "
+                + "وعبر " + total + " خبرًا، تتواصل التحديثات في ملفات الأمن والسياسة وردود الفعل الدولية. "
+                + "الخلاصة: الوضع ديناميكي ويتطلب متابعة مستمرة.";
     }
 
     private String trim(String text, int maxLen) {

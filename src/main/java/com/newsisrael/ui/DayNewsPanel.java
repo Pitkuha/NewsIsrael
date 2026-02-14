@@ -1,10 +1,12 @@
 package com.newsisrael.ui;
 
+import com.newsisrael.i18n.AppLanguage;
+import com.newsisrael.i18n.I18n;
 import com.newsisrael.model.NewsArticle;
 
 import javax.swing.BorderFactory;
+import javax.swing.DefaultListCellRenderer;
 import javax.swing.DefaultListModel;
-import javax.swing.JButton;
 import javax.swing.JEditorPane;
 import javax.swing.JLabel;
 import javax.swing.JList;
@@ -12,10 +14,10 @@ import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import javax.swing.ListSelectionModel;
-import javax.swing.DefaultListCellRenderer;
 import javax.swing.event.HyperlinkEvent;
 import java.awt.BorderLayout;
 import java.awt.Color;
+import java.awt.ComponentOrientation;
 import java.awt.Desktop;
 import java.awt.Font;
 import java.io.IOException;
@@ -32,13 +34,17 @@ public class DayNewsPanel extends JPanel {
     private final DefaultListModel<NewsArticle> listModel;
     private final JList<NewsArticle> newsList;
     private final JEditorPane detailsPane;
+    private final JScrollPane listScroll;
+    private final JScrollPane detailScroll;
+
+    private AppLanguage language;
 
     public DayNewsPanel() {
         setLayout(new BorderLayout(12, 12));
         setBackground(new Color(246, 248, 251));
         setBorder(BorderFactory.createEmptyBorder(14, 14, 14, 14));
 
-        titleLabel = new JLabel("Загрузка...");
+        titleLabel = new JLabel();
         titleLabel.setFont(new Font("SansSerif", Font.BOLD, 18));
         titleLabel.setForeground(new Color(26, 39, 64));
 
@@ -94,11 +100,8 @@ public class DayNewsPanel extends JPanel {
             }
         });
 
-        JScrollPane listScroll = new JScrollPane(newsList);
-        listScroll.setBorder(BorderFactory.createTitledBorder("Новости"));
-
-        JScrollPane detailScroll = new JScrollPane(detailsPane);
-        detailScroll.setBorder(BorderFactory.createTitledBorder("Подробности"));
+        listScroll = new JScrollPane(newsList);
+        detailScroll = new JScrollPane(detailsPane);
 
         JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, listScroll, detailScroll);
         splitPane.setResizeWeight(0.45);
@@ -111,24 +114,37 @@ public class DayNewsPanel extends JPanel {
 
         add(topPanel, BorderLayout.NORTH);
         add(splitPane, BorderLayout.CENTER);
+
+        setLanguage(AppLanguage.defaultLanguage());
+    }
+
+    public void setLanguage(AppLanguage language) {
+        this.language = language;
+        listScroll.setBorder(BorderFactory.createTitledBorder(I18n.panelNewsSection(language)));
+        detailScroll.setBorder(BorderFactory.createTitledBorder(I18n.panelDetailsSection(language)));
+
+        ComponentOrientation orientation = language.isRtl()
+                ? ComponentOrientation.RIGHT_TO_LEFT
+                : ComponentOrientation.LEFT_TO_RIGHT;
+        applyComponentOrientation(orientation);
     }
 
     public void setLoadingState(String text) {
         titleLabel.setText(text);
-        summaryPane.setText("Идет загрузка...");
+        summaryPane.setText(I18n.panelLoadingText(language));
         listModel.clear();
         detailsPane.setText("");
     }
 
     public void setErrorState(String message) {
-        titleLabel.setText("Ошибка");
+        titleLabel.setText(I18n.panelErrorTitle(language));
         summaryPane.setText(message);
         listModel.clear();
-        detailsPane.setText("<html><body><p>Не удалось загрузить новости.</p></body></html>");
+        detailsPane.setText("<html><body><p>" + escape(I18n.panelLoadFailed(language)) + "</p></body></html>");
     }
 
     public void setData(List<NewsArticle> articles, String summary) {
-        titleLabel.setText("Новости и сводка");
+        titleLabel.setText(I18n.panelNewsAndSummaryTitle(language));
         summaryPane.setText(summary);
         listModel.clear();
         for (NewsArticle article : articles) {
@@ -137,7 +153,7 @@ public class DayNewsPanel extends JPanel {
         if (!listModel.isEmpty()) {
             newsList.setSelectedIndex(0);
         } else {
-            detailsPane.setText("<html><body><p>Публикаций за этот день не найдено.</p></body></html>");
+            detailsPane.setText("<html><body><p>" + escape(I18n.panelNoPublications(language)) + "</p></body></html>");
         }
     }
 
@@ -148,17 +164,19 @@ public class DayNewsPanel extends JPanel {
         }
 
         String published = TIME_FORMAT.format(article.publishedAt().atZone(ZoneId.systemDefault()));
-        String description = article.description().isBlank() ? "Описание отсутствует." : article.description();
+        String description = article.description().isBlank() ? I18n.descriptionMissing(language) : article.description();
         String url = article.url().isBlank() ? "" : article.url();
 
         StringBuilder html = new StringBuilder();
         html.append("<html><body style='font-family:SansSerif; color:#1f2a44;'>");
         html.append("<h2 style='margin-top:0;'>").append(escape(article.title())).append("</h2>");
-        html.append("<p><b>Источник:</b> ").append(escape(article.source())).append("</p>");
-        html.append("<p><b>Время:</b> ").append(escape(published)).append("</p>");
+        html.append("<p><b>").append(escape(I18n.sourceLabel(language))).append("</b> ").append(escape(article.source())).append("</p>");
+        html.append("<p><b>").append(escape(I18n.timeLabel(language))).append("</b> ").append(escape(published)).append("</p>");
         html.append("<p>").append(escape(description)).append("</p>");
         if (!url.isBlank()) {
-            html.append("<p><a href='").append(escape(url)).append("'>Открыть оригинал</a></p>");
+            html.append("<p><a href='").append(escape(url)).append("'>")
+                    .append(escape(I18n.openOriginal(language)))
+                    .append("</a></p>");
         }
         html.append("</body></html>");
         detailsPane.setText(html.toString());

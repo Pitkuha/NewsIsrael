@@ -1,5 +1,7 @@
 package com.newsisrael.service;
 
+import com.newsisrael.i18n.AppLanguage;
+
 import java.io.IOException;
 import java.net.URI;
 import java.net.URLEncoder;
@@ -14,7 +16,7 @@ import java.util.Map;
 
 public class TranslationService {
     private static final String TRANSLATE_URL =
-            "https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=ru&dt=t&q=%s";
+            "https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=%s&dt=t&q=%s";
     private static final int MAX_REQUEST_CHARS = 700;
 
     private final HttpClient httpClient;
@@ -25,22 +27,23 @@ public class TranslationService {
         this.cache = new LinkedHashMap<>(256, 0.75f, true) {
             @Override
             protected boolean removeEldestEntry(Map.Entry<String, String> eldest) {
-                return size() > 500;
+                return size() > 1000;
             }
         };
     }
 
-    public String translateToRussian(String text) {
+    public String translate(String text, AppLanguage language) {
         if (text == null || text.isBlank()) {
             return "";
         }
 
         String normalized = text.trim();
-        if (looksRussian(normalized)) {
+        if (language == AppLanguage.ENGLISH || looksLikeTargetLanguage(normalized, language)) {
             return normalized;
         }
 
-        String cached = cache.get(normalized);
+        String cacheKey = language.code() + "|" + normalized;
+        String cached = cache.get(cacheKey);
         if (cached != null) {
             return cached;
         }
@@ -50,8 +53,8 @@ public class TranslationService {
                 : normalized;
 
         try {
-            String encoded = URLEncoder.encode(requestText, StandardCharsets.UTF_8);
-            String url = TRANSLATE_URL.formatted(encoded);
+            String encodedText = URLEncoder.encode(requestText, StandardCharsets.UTF_8);
+            String url = TRANSLATE_URL.formatted(language.code(), encodedText);
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(url))
                     .header("User-Agent", "NewsIsraelApp/1.0")
@@ -68,11 +71,15 @@ public class TranslationService {
                 return normalized;
             }
 
-            cache.put(normalized, translated);
+            cache.put(cacheKey, translated);
             return translated;
         } catch (IOException | InterruptedException e) {
             return normalized;
         }
+    }
+
+    public String translateToRussian(String text) {
+        return translate(text, AppLanguage.RUSSIAN);
     }
 
     private String parseTranslatedText(String rawBody) {
@@ -139,19 +146,28 @@ public class TranslationService {
         return sb.toString();
     }
 
-    private boolean looksRussian(String text) {
-        int cyrillic = 0;
+    private boolean looksLikeTargetLanguage(String text, AppLanguage language) {
+        return switch (language) {
+            case RUSSIAN -> hasScriptRatio(text, Character.UnicodeBlock.CYRILLIC, 0.35);
+            case HEBREW -> hasScriptRatio(text, Character.UnicodeBlock.HEBREW, 0.25);
+            case ARABIC -> hasScriptRatio(text, Character.UnicodeBlock.ARABIC, 0.25);
+            case ENGLISH -> true;
+        };
+    }
+
+    private boolean hasScriptRatio(String text, Character.UnicodeBlock block, double threshold) {
+        int scriptCount = 0;
         int letters = 0;
         for (int i = 0; i < text.length(); i++) {
             char ch = text.charAt(i);
             if (Character.isLetter(ch)) {
                 letters++;
-                if (Character.UnicodeBlock.of(ch) == Character.UnicodeBlock.CYRILLIC) {
-                    cyrillic++;
+                if (Character.UnicodeBlock.of(ch) == block) {
+                    scriptCount++;
                 }
             }
         }
-        return letters > 0 && ((double) cyrillic / letters) > 0.35;
+        return letters > 0 && ((double) scriptCount / letters) > threshold;
     }
 
     private String extractFirstArrayElement(String jsonArray) {

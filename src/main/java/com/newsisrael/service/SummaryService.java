@@ -1,7 +1,9 @@
 package com.newsisrael.service;
 
+import com.newsisrael.i18n.AppLanguage;
 import com.newsisrael.model.NewsArticle;
 
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -30,16 +32,16 @@ public class SummaryService {
         this.aiOpinionService = new AiOpinionService(java.net.http.HttpClient.newHttpClient());
     }
 
-    public String buildSummary(List<NewsArticle> articles, java.time.LocalDate date) {
+    public String buildSummary(List<NewsArticle> articles, LocalDate date, AppLanguage language) {
         if (articles.isEmpty()) {
-            return "За выбранный день новостей по Израилю не найдено.";
+            return noNewsText(language);
         }
 
         List<String> lines = new ArrayList<>();
-        lines.add("Найдено публикаций: " + articles.size() + ".");
+        lines.add(foundPublicationsText(language, articles.size()));
 
         List<NewsArticle> top = articles.stream().limit(5).toList();
-        lines.add("Ключевые заголовки:");
+        lines.add(headlinesTitle(language));
         for (int i = 0; i < top.size(); i++) {
             lines.add((i + 1) + ". " + top.get(i).title());
         }
@@ -47,22 +49,26 @@ public class SummaryService {
         List<String> topics = extractTopics(articles);
         if (!topics.isEmpty()) {
             lines.add("");
-            lines.add("Основные темы дня: " + String.join(", ", topics) + ".");
+            lines.add(topicsTitle(language) + String.join(", ", topics) + ".");
         }
 
         lines.add("");
-        lines.add("Краткий вывод:");
-        lines.add(buildConclusion(articles, topics));
+        lines.add(conclusionTitle(language));
+        lines.add(buildConclusion(articles, topics, language));
 
         lines.add("");
-        lines.add("AI-мнение:");
-        lines.add(aiOpinionService.buildOpinion(date, articles));
+        lines.add(aiOpinionTitle(language));
+        lines.add(aiOpinionService.buildOpinion(date, articles, language));
 
         return String.join("\n", lines);
     }
 
+    public String buildSummary(List<NewsArticle> articles, LocalDate date) {
+        return buildSummary(articles, date, AppLanguage.defaultLanguage());
+    }
+
     public String buildSummary(List<NewsArticle> articles) {
-        return buildSummary(articles, java.time.LocalDate.now());
+        return buildSummary(articles, LocalDate.now(), AppLanguage.defaultLanguage());
     }
 
     private List<String> extractTopics(List<NewsArticle> articles) {
@@ -85,7 +91,7 @@ public class SummaryService {
                 .collect(Collectors.toList());
     }
 
-    private String buildConclusion(List<NewsArticle> articles, List<String> topics) {
+    private String buildConclusion(List<NewsArticle> articles, List<String> topics, AppLanguage language) {
         List<String> summaryTopics = topics.stream().limit(3).toList();
 
         Map<String, Long> sourceCounts = articles.stream()
@@ -96,21 +102,113 @@ public class SummaryService {
                 .map(Map.Entry::getKey)
                 .toList();
 
-        String firstSentence;
-        if (summaryTopics.isEmpty()) {
-            firstSentence = "По публикациям за этот день повестка остается динамичной, без явного доминирования одной темы.";
-        } else {
-            firstSentence = "По публикациям за этот день в центре внимания: " + String.join(", ", summaryTopics) + ".";
-        }
+        return switch (language) {
+            case ENGLISH -> buildConclusionEn(summaryTopics, topSources);
+            case HEBREW -> buildConclusionHe(summaryTopics, topSources);
+            case ARABIC -> buildConclusionAr(summaryTopics, topSources);
+            case RUSSIAN -> buildConclusionRu(summaryTopics, topSources);
+        };
+    }
 
-        String secondSentence;
-        if (topSources.isEmpty()) {
-            secondSentence = "Информация поступает из разных источников, поэтому картину важно отслеживать в обновлениях.";
-        } else {
-            secondSentence = "Наибольшее число сообщений пришло от " + String.join(" и ", topSources) + ".";
-        }
+    private String buildConclusionRu(List<String> topics, List<String> sources) {
+        String firstSentence = topics.isEmpty()
+                ? "По публикациям за этот день повестка остается динамичной, без явного доминирования одной темы."
+                : "По публикациям за этот день в центре внимания: " + String.join(", ", topics) + ".";
 
-        String thirdSentence = "Ситуация развивается в течение дня, поэтому полезно периодически обновлять ленту.";
-        return firstSentence + " " + secondSentence + " " + thirdSentence;
+        String secondSentence = sources.isEmpty()
+                ? "Информация поступает из разных источников, поэтому картину важно отслеживать в обновлениях."
+                : "Наибольшее число сообщений пришло от " + String.join(" и ", sources) + ".";
+
+        return firstSentence + " " + secondSentence + " Ситуация развивается в течение дня, поэтому полезно периодически обновлять ленту.";
+    }
+
+    private String buildConclusionEn(List<String> topics, List<String> sources) {
+        String firstSentence = topics.isEmpty()
+                ? "The daily agenda remains dynamic with no single dominant storyline."
+                : "The main focus areas today are: " + String.join(", ", topics) + ".";
+
+        String secondSentence = sources.isEmpty()
+                ? "Coverage comes from multiple outlets, so updates should be tracked continuously."
+                : "The largest volume of updates came from " + String.join(" and ", sources) + ".";
+
+        return firstSentence + " " + secondSentence + " Overall, the situation is evolving throughout the day.";
+    }
+
+    private String buildConclusionHe(List<String> topics, List<String> sources) {
+        String firstSentence = topics.isEmpty()
+                ? "סדר היום החדשותי דינמי, ללא נושא אחד דומיננטי באופן מובהק."
+                : "הנושאים המרכזיים היום הם: " + String.join(", ", topics) + ".";
+
+        String secondSentence = sources.isEmpty()
+                ? "המידע מגיע ממקורות שונים ולכן חשוב לעקוב אחר עדכונים באופן רציף."
+                : "עיקר הדיווחים הגיעו מ-" + String.join(" ו-", sources) + ".";
+
+        return firstSentence + " " + secondSentence + " התמונה הכללית ממשיכה להתפתח במהלך היום.";
+    }
+
+    private String buildConclusionAr(List<String> topics, List<String> sources) {
+        String firstSentence = topics.isEmpty()
+                ? "الأجندة الإخبارية اليومية متحركة ولا يوجد موضوع واحد مهيمن بشكل واضح."
+                : "أبرز محاور اليوم هي: " + String.join(", ", topics) + ".";
+
+        String secondSentence = sources.isEmpty()
+                ? "تأتي المعلومات من مصادر متعددة، لذلك من المهم متابعة التحديثات باستمرار."
+                : "أكبر حجم من التغطية جاء من " + String.join(" و", sources) + ".";
+
+        return firstSentence + " " + secondSentence + " بشكل عام، الصورة تتطور على مدار اليوم.";
+    }
+
+    private String noNewsText(AppLanguage language) {
+        return switch (language) {
+            case RUSSIAN -> "За выбранный день новостей по Израилю не найдено.";
+            case ENGLISH -> "No Israel-related news found for the selected day.";
+            case HEBREW -> "לא נמצאו חדשות על ישראל עבור התאריך שנבחר.";
+            case ARABIC -> "لم يتم العثور على أخبار عن إسرائيل في اليوم المحدد.";
+        };
+    }
+
+    private String foundPublicationsText(AppLanguage language, int count) {
+        return switch (language) {
+            case RUSSIAN -> "Найдено публикаций: " + count + ".";
+            case ENGLISH -> "Articles found: " + count + ".";
+            case HEBREW -> "נמצאו כתבות: " + count + ".";
+            case ARABIC -> "عدد الأخبار: " + count + ".";
+        };
+    }
+
+    private String headlinesTitle(AppLanguage language) {
+        return switch (language) {
+            case RUSSIAN -> "Ключевые заголовки:";
+            case ENGLISH -> "Top headlines:";
+            case HEBREW -> "כותרות מרכזיות:";
+            case ARABIC -> "أبرز العناوين:";
+        };
+    }
+
+    private String topicsTitle(AppLanguage language) {
+        return switch (language) {
+            case RUSSIAN -> "Основные темы дня: ";
+            case ENGLISH -> "Main topics of the day: ";
+            case HEBREW -> "הנושאים המרכזיים של היום: ";
+            case ARABIC -> "الموضوعات الرئيسية لليوم: ";
+        };
+    }
+
+    private String conclusionTitle(AppLanguage language) {
+        return switch (language) {
+            case RUSSIAN -> "Краткий вывод:";
+            case ENGLISH -> "Brief conclusion:";
+            case HEBREW -> "מסקנה קצרה:";
+            case ARABIC -> "خلاصة قصيرة:";
+        };
+    }
+
+    private String aiOpinionTitle(AppLanguage language) {
+        return switch (language) {
+            case RUSSIAN -> "AI-мнение:";
+            case ENGLISH -> "AI opinion:";
+            case HEBREW -> "חוות דעת AI:";
+            case ARABIC -> "رأي الذكاء الاصطناعي:";
+        };
     }
 }

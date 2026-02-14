@@ -1,5 +1,6 @@
 package com.newsisrael.service;
 
+import com.newsisrael.i18n.AppLanguage;
 import com.newsisrael.model.NewsArticle;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
@@ -43,10 +44,14 @@ public class NewsService {
     }
 
     public List<NewsArticle> loadNewsForDate(LocalDate date) throws IOException, InterruptedException {
-        return loadNewsForDate(date, Integer.MAX_VALUE);
+        return loadNewsForDate(date, Integer.MAX_VALUE, AppLanguage.defaultLanguage());
     }
 
     public List<NewsArticle> loadNewsForDate(LocalDate date, int limit) throws IOException, InterruptedException {
+        return loadNewsForDate(date, limit, AppLanguage.defaultLanguage());
+    }
+
+    public List<NewsArticle> loadNewsForDate(LocalDate date, int limit, AppLanguage language) throws IOException, InterruptedException {
         List<NewsArticle> result = new ArrayList<>();
 
         for (FeedSource feed : FEEDS) {
@@ -70,7 +75,7 @@ public class NewsService {
         List<NewsArticle> limited = deduplicated.size() > safeLimit
                 ? deduplicated.subList(0, safeLimit)
                 : deduplicated;
-        return translateArticles(limited);
+        return translateArticles(limited, language);
     }
 
     private String download(String url) throws IOException, InterruptedException {
@@ -251,11 +256,11 @@ public class NewsService {
         return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
     }
 
-    private List<NewsArticle> translateArticles(List<NewsArticle> articles) {
+    private List<NewsArticle> translateArticles(List<NewsArticle> articles, AppLanguage language) {
         List<NewsArticle> translated = new ArrayList<>(articles.size());
         for (NewsArticle article : articles) {
-            String titleRu = translationService.translateToRussian(article.title());
-            String descriptionRu = translationService.translateToRussian(article.description());
+            String titleRu = translationService.translate(article.title(), language);
+            String descriptionRu = translationService.translate(article.description(), language);
             translated.add(new NewsArticle(
                     titleRu.isBlank() ? article.title() : titleRu,
                     descriptionRu.isBlank() ? article.description() : descriptionRu,

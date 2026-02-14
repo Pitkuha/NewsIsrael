@@ -1,5 +1,7 @@
 package com.newsisrael.ui;
 
+import com.newsisrael.i18n.AppLanguage;
+import com.newsisrael.i18n.I18n;
 import com.newsisrael.model.NewsArticle;
 import com.newsisrael.service.NewsService;
 import com.newsisrael.service.SummaryService;
@@ -13,13 +15,15 @@ import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JSpinner;
 import javax.swing.JTabbedPane;
+import javax.swing.SpinnerDateModel;
 import javax.swing.SwingUtilities;
 import javax.swing.SwingWorker;
 import javax.swing.UIManager;
 import javax.swing.WindowConstants;
-import javax.swing.SpinnerDateModel;
 import java.awt.BorderLayout;
 import java.awt.Color;
+import java.awt.Component;
+import java.awt.ComponentOrientation;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
@@ -40,40 +44,52 @@ public class NewsMainFrame extends JFrame {
     private final SummaryService summaryService;
     private final JTabbedPane tabs;
     private final JLabel statusLabel;
+    private final JPanel rootPanel;
+
+    private JLabel headerTitle;
+    private JLabel dateLabel;
+    private JLabel countLabel;
+    private JLabel languageLabel;
+    private JButton openDayButton;
     private JButton refreshButton;
     private JComboBox<Integer> newsLimitComboBox;
+    private JComboBox<AppLanguage> languageComboBox;
     private JSpinner dateSpinner;
+
     private final Map<LocalDate, DayNewsPanel> dayPanels;
+    private AppLanguage currentLanguage;
 
     public NewsMainFrame() {
-        super("Israel News Digest");
+        super("Israel News");
         this.newsService = new NewsService();
         this.summaryService = new SummaryService();
         this.dayPanels = new LinkedHashMap<>();
+        this.currentLanguage = AppLanguage.defaultLanguage();
 
         setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
         setSize(new Dimension(1200, 760));
         setMinimumSize(new Dimension(980, 620));
         setLocationRelativeTo(null);
 
-        JPanel root = new JPanel(new BorderLayout(10, 10));
-        root.setBackground(new Color(238, 242, 247));
-        root.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        rootPanel = new JPanel(new BorderLayout(10, 10));
+        rootPanel.setBackground(new Color(238, 242, 247));
+        rootPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
 
         JPanel header = buildHeader();
-        root.add(header, BorderLayout.NORTH);
+        rootPanel.add(header, BorderLayout.NORTH);
 
         tabs = new JTabbedPane();
         tabs.setFont(new Font("SansSerif", Font.PLAIN, 13));
-        root.add(tabs, BorderLayout.CENTER);
+        rootPanel.add(tabs, BorderLayout.CENTER);
 
-        statusLabel = new JLabel("Готово");
+        statusLabel = new JLabel();
         statusLabel.setFont(new Font("SansSerif", Font.PLAIN, 12));
         statusLabel.setBorder(BorderFactory.createEmptyBorder(6, 6, 6, 6));
-        root.add(statusLabel, BorderLayout.SOUTH);
+        rootPanel.add(statusLabel, BorderLayout.SOUTH);
 
-        setContentPane(root);
+        setContentPane(rootPanel);
         applyLookAndFeel();
+        applyLanguage();
         initDefaultTab();
     }
 
@@ -81,38 +97,55 @@ public class NewsMainFrame extends JFrame {
         JPanel header = new JPanel(new BorderLayout());
         header.setOpaque(false);
 
-        JLabel title = new JLabel("Новости Израиля");
-        title.setFont(new Font("SansSerif", Font.BOLD, 24));
-        title.setForeground(new Color(26, 39, 64));
+        headerTitle = new JLabel();
+        headerTitle.setFont(new Font("SansSerif", Font.BOLD, 24));
+        headerTitle.setForeground(new Color(26, 39, 64));
 
         JPanel controls = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
         controls.setOpaque(false);
 
+        dateLabel = new JLabel();
         dateSpinner = new JSpinner(new SpinnerDateModel());
         JSpinner.DateEditor editor = new JSpinner.DateEditor(dateSpinner, "dd.MM.yyyy");
         dateSpinner.setEditor(editor);
         dateSpinner.setValue(new Date());
         dateSpinner.setPreferredSize(new Dimension(120, 30));
 
-        JButton openDayButton = new JButton("Открыть день");
-        openDayButton.addActionListener(e -> openSelectedDay());
-
-        refreshButton = new JButton("Обновить");
-        refreshButton.addActionListener(e -> refreshCurrentTab());
-
+        countLabel = new JLabel();
         newsLimitComboBox = new JComboBox<>(NEWS_LIMIT_OPTIONS);
         newsLimitComboBox.setSelectedItem(15);
         newsLimitComboBox.setPreferredSize(new Dimension(80, 30));
         newsLimitComboBox.addActionListener(e -> refreshCurrentTab());
 
-        controls.add(new JLabel("Дата:"));
+        languageLabel = new JLabel();
+        languageComboBox = new JComboBox<>(AppLanguage.values());
+        languageComboBox.setSelectedItem(currentLanguage);
+        languageComboBox.setPreferredSize(new Dimension(110, 30));
+        languageComboBox.addActionListener(e -> {
+            AppLanguage selected = (AppLanguage) languageComboBox.getSelectedItem();
+            if (selected != null && selected != currentLanguage) {
+                currentLanguage = selected;
+                applyLanguage();
+                refreshCurrentTab();
+            }
+        });
+
+        openDayButton = new JButton();
+        openDayButton.addActionListener(e -> openSelectedDay());
+
+        refreshButton = new JButton();
+        refreshButton.addActionListener(e -> refreshCurrentTab());
+
+        controls.add(dateLabel);
         controls.add(dateSpinner);
-        controls.add(new JLabel("Кол-во:"));
+        controls.add(countLabel);
         controls.add(newsLimitComboBox);
+        controls.add(languageLabel);
+        controls.add(languageComboBox);
         controls.add(openDayButton);
         controls.add(refreshButton);
 
-        header.add(title, BorderLayout.WEST);
+        header.add(headerTitle, BorderLayout.WEST);
         header.add(controls, BorderLayout.EAST);
 
         return header;
@@ -122,6 +155,38 @@ public class NewsMainFrame extends JFrame {
         try {
             UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
         } catch (Exception ignored) {
+        }
+    }
+
+    private void applyLanguage() {
+        setTitle(I18n.appTitle(currentLanguage));
+        headerTitle.setText(I18n.appTitle(currentLanguage));
+        dateLabel.setText(I18n.dateLabel(currentLanguage));
+        countLabel.setText(I18n.countLabel(currentLanguage));
+        languageLabel.setText(I18n.languageLabel(currentLanguage));
+        openDayButton.setText(I18n.openDayButton(currentLanguage));
+        refreshButton.setText(I18n.refreshButton(currentLanguage));
+        statusLabel.setText(I18n.statusReady(currentLanguage));
+
+        for (DayNewsPanel panel : dayPanels.values()) {
+            panel.setLanguage(currentLanguage);
+        }
+        updateTabTitles();
+
+        ComponentOrientation orientation = currentLanguage.isRtl()
+                ? ComponentOrientation.RIGHT_TO_LEFT
+                : ComponentOrientation.LEFT_TO_RIGHT;
+        rootPanel.applyComponentOrientation(orientation);
+        applyComponentOrientationRecursively(rootPanel, orientation);
+        SwingUtilities.updateComponentTreeUI(this);
+    }
+
+    private void applyComponentOrientationRecursively(Component component, ComponentOrientation orientation) {
+        component.setComponentOrientation(orientation);
+        if (component instanceof java.awt.Container container) {
+            for (Component child : container.getComponents()) {
+                applyComponentOrientationRecursively(child, orientation);
+            }
         }
     }
 
@@ -136,7 +201,10 @@ public class NewsMainFrame extends JFrame {
                 .toLocalDate();
 
         if (day.isAfter(LocalDate.now())) {
-            JOptionPane.showMessageDialog(this, "Нельзя открыть будущую дату.", "Ошибка", JOptionPane.WARNING_MESSAGE);
+            JOptionPane.showMessageDialog(this,
+                    I18n.futureDateMessage(currentLanguage),
+                    I18n.warningTitle(currentLanguage),
+                    JOptionPane.WARNING_MESSAGE);
             return;
         }
 
@@ -151,6 +219,7 @@ public class NewsMainFrame extends JFrame {
         }
 
         DayNewsPanel panel = new DayNewsPanel();
+        panel.setLanguage(currentLanguage);
         dayPanels.put(date, panel);
         tabs.addTab(tabTitle(date), panel);
         tabs.setSelectedComponent(panel);
@@ -158,48 +227,59 @@ public class NewsMainFrame extends JFrame {
     }
 
     private void refreshCurrentTab() {
-        int index = tabs.getSelectedIndex();
-        if (index < 0) {
+        if (tabs == null) {
             return;
         }
 
-        String title = tabs.getTitleAt(index);
-        LocalDate date = parseDateFromTabTitle(title);
+        LocalDate date = getSelectedDate();
         if (date == null) {
             return;
         }
 
         DayNewsPanel panel = dayPanels.get(date);
         if (panel != null) {
+            panel.setLanguage(currentLanguage);
             loadDataIntoPanel(date, panel);
         }
     }
 
-    private LocalDate parseDateFromTabTitle(String title) {
-        try {
-            if ("Сегодня".equals(title)) {
-                return LocalDate.now();
-            }
-            return LocalDate.parse(title, TAB_DATE_FORMAT);
-        } catch (Exception e) {
+    private LocalDate getSelectedDate() {
+        Component selected = tabs.getSelectedComponent();
+        if (selected == null) {
             return null;
         }
+
+        for (Map.Entry<LocalDate, DayNewsPanel> entry : dayPanels.entrySet()) {
+            if (entry.getValue() == selected) {
+                return entry.getKey();
+            }
+        }
+        return null;
     }
 
     private String tabTitle(LocalDate date) {
-        return date.equals(LocalDate.now()) ? "Сегодня" : TAB_DATE_FORMAT.format(date);
+        return date.equals(LocalDate.now()) ? I18n.todayTab(currentLanguage) : TAB_DATE_FORMAT.format(date);
+    }
+
+    private void updateTabTitles() {
+        for (Map.Entry<LocalDate, DayNewsPanel> entry : dayPanels.entrySet()) {
+            int index = tabs.indexOfComponent(entry.getValue());
+            if (index >= 0) {
+                tabs.setTitleAt(index, tabTitle(entry.getKey()));
+            }
+        }
     }
 
     private void loadDataIntoPanel(LocalDate date, DayNewsPanel panel) {
         int limit = getSelectedNewsLimit();
-        panel.setLoadingState("Загрузка новостей за " + TAB_DATE_FORMAT.format(date));
-        statusLabel.setText("Обновление: " + TAB_DATE_FORMAT.format(date) + " | лимит: " + limit);
+        panel.setLoadingState(I18n.loadingForDate(currentLanguage, date));
+        statusLabel.setText(I18n.statusUpdating(currentLanguage, date, limit));
         refreshButton.setEnabled(false);
 
         SwingWorker<List<NewsArticle>, Void> worker = new SwingWorker<>() {
             @Override
             protected List<NewsArticle> doInBackground() throws Exception {
-                return newsService.loadNewsForDate(date, limit);
+                return newsService.loadNewsForDate(date, limit, currentLanguage);
             }
 
             @Override
@@ -207,12 +287,12 @@ public class NewsMainFrame extends JFrame {
                 refreshButton.setEnabled(true);
                 try {
                     List<NewsArticle> articles = get();
-                    String summary = summaryService.buildSummary(articles, date);
+                    String summary = summaryService.buildSummary(articles, date, currentLanguage);
                     panel.setData(articles, summary);
-                    statusLabel.setText("Обновлено: " + TAB_DATE_FORMAT.format(date) + " | новостей: " + articles.size());
+                    statusLabel.setText(I18n.statusUpdated(currentLanguage, date, articles.size()));
                 } catch (Exception ex) {
                     panel.setErrorState(ex.getMessage());
-                    statusLabel.setText("Ошибка загрузки");
+                    statusLabel.setText(I18n.statusError(currentLanguage));
                 }
             }
         };
@@ -231,7 +311,6 @@ public class NewsMainFrame extends JFrame {
         SwingUtilities.invokeLater(() -> {
             NewsMainFrame frame = new NewsMainFrame();
             frame.setVisible(true);
-            // Гарантируем автоматическую первичную загрузку после открытия окна.
             SwingUtilities.invokeLater(frame::refreshCurrentTab);
         });
     }

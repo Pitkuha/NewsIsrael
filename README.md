@@ -8,6 +8,7 @@ NewsIsrael is a Java desktop application with a graphical UI that:
 - adds a concise end-of-summary conclusion about the current daily picture;
 - adds an `AI opinion` block where a model analyzes all daily news and gives its view of the current situation;
 - supports a news count filter (5, 10, 15, 20, 30, 50);
+- supports UI and content localization with language switcher: Russian, English, Hebrew, Arabic;
 - supports day-based tabs (you can open previous dates);
 - supports manual refresh via the `Refresh` button.
 
@@ -59,6 +60,7 @@ If AI services are unavailable, the app shows a fallback analytical opinion.
 - добавляет в конце сводки короткий вывод по текущей картине дня;
 - добавляет блок `AI-мнение`, где модель анализирует все новости за день и пишет оценку обстановки;
 - поддерживает фильтр количества новостей (5, 10, 15, 20, 30, 50);
+- поддерживает локализацию интерфейса и контента через переключатель языков: русский, английский, иврит, арабский;
 - поддерживает вкладки по датам (можно открыть предыдущие дни);
 - обновляет текущую вкладку кнопкой `Обновить`.
 
